@@ -19,6 +19,7 @@ class SchedulingResult:
     avg_waiting_time: float = 0.0
     avg_turnaround_time: float = 0.0
     avg_response_time: float = 0.0
+    avg_completion_time: float = 0.0
     cpu_utilization: float = 0.0
     throughput: float = 0.0
     
@@ -31,10 +32,12 @@ class SchedulingResult:
         total_waiting = sum(p.waiting_time for p in self.processes)
         total_turnaround = sum(p.turnaround_time for p in self.processes)
         total_response = sum(p.response_time for p in self.processes if p.response_time >= 0)
+        total_completion = sum(p.completion_time for p in self.processes)
         
         self.avg_waiting_time = total_waiting / n
         self.avg_turnaround_time = total_turnaround / n
         self.avg_response_time = total_response / n if n > 0 else 0
+        self.avg_completion_time = total_completion / n
         
         # Calculate CPU utilization
         if self.total_time > 0:

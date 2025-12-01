@@ -250,6 +250,7 @@ class ConsoleUI:
         table.add_row("Avg Waiting Time", f"{result.avg_waiting_time:.2f}ms")
         table.add_row("Avg Turnaround Time", f"{result.avg_turnaround_time:.2f}ms")
         table.add_row("Avg Response Time", f"{result.avg_response_time:.2f}ms")
+        table.add_row("Avg Completion Time", f"{result.avg_completion_time:.2f}ms")
         table.add_row("CPU Utilization", f"{result.cpu_utilization:.2f}%")
         table.add_row("Throughput", f"{result.throughput:.2f} proc/sec")
         
@@ -259,6 +260,7 @@ class ConsoleUI:
         proc_table = Table(title="Process Details", box=box.ROUNDED)
         proc_table.add_column("PID", style="cyan")
         proc_table.add_column("Burst", justify="right")
+        proc_table.add_column("Completion", style="blue", justify="right")
         proc_table.add_column("Waiting", style="yellow", justify="right")
         proc_table.add_column("Turnaround", style="green", justify="right")
         proc_table.add_column("Response", style="magenta", justify="right")
@@ -267,6 +269,7 @@ class ConsoleUI:
             proc_table.add_row(
                 f"P{p.pid}",
                 str(p.burst_time),
+                str(p.completion_time),
                 str(p.waiting_time),
                 str(p.turnaround_time),
                 str(p.response_time) if p.response_time >= 0 else "-"
@@ -277,15 +280,41 @@ class ConsoleUI:
     # ==================== Gantt Chart ====================
     
     def view_gantt_chart(self) -> None:
-        """View the Gantt chart."""
-        gantt_data = self.engine.get_gantt_chart()
+        """View the Gantt chart with sub-menu options."""
+        # Check if any simulation data exists (either current or in history)
+        has_current = bool(self.engine.get_gantt_chart())
+        has_history = self.engine.history.has_runs()
         
-        if not gantt_data:
+        if not has_current and not has_history:
             self.menu.print_error("No simulation data. Run a simulation first.")
             self.menu.wait_for_enter()
             return
         
-        self.menu.print_header("Gantt Chart")
+        while True:
+            self.menu.display_menu("gantt")
+            choice = self.menu.get_choice("gantt")
+            
+            if choice == "0":
+                break
+            elif choice == "1":
+                self._view_current_simulation()
+            elif choice == "2":
+                self._view_all_history()
+            elif choice == "3":
+                self._view_specific_run()
+            elif choice == "4":
+                self._clear_history()
+    
+    def _view_current_simulation(self) -> None:
+        """View Gantt chart for current simulation."""
+        gantt_data = self.engine.get_gantt_chart()
+        
+        if not gantt_data:
+            self.menu.print_error("No current simulation data. Run a simulation first.")
+            self.menu.wait_for_enter()
+            return
+        
+        self.menu.print_header("Current Simulation - Gantt Chart")
         
         # ASCII version
         ascii_chart = self.gantt.generate_ascii(gantt_data)
@@ -294,6 +323,56 @@ class ConsoleUI:
         # Rich version
         self.gantt.generate_rich(gantt_data)
         self.gantt.generate_summary_table(gantt_data, self.engine.processes)
+        
+        self.menu.wait_for_enter()
+    
+    def _view_all_history(self) -> None:
+        """View Gantt charts for all simulation runs."""
+        if not self.engine.history.has_runs():
+            self.menu.print_error("No simulation runs in history.")
+            self.menu.wait_for_enter()
+            return
+        
+        self.menu.print_header("All Simulation History")
+        self.gantt.display_all_runs(self.engine.history)
+        self.menu.wait_for_enter()
+    
+    def _view_specific_run(self) -> None:
+        """View Gantt chart for a specific simulation run."""
+        if not self.engine.history.has_runs():
+            self.menu.print_error("No simulation runs in history.")
+            self.menu.wait_for_enter()
+            return
+        
+        # Show available runs
+        self.gantt.list_runs(self.engine.history)
+        
+        run_count = self.engine.history.get_run_count()
+        run_number = self.menu.prompt_int(
+            "Enter run number to view", 
+            default=run_count, 
+            min_val=1, 
+            max_val=run_count
+        )
+        
+        self.menu.print_header(f"Simulation Run #{run_number}")
+        self.gantt.display_single_run(self.engine.history, run_number)
+        self.menu.wait_for_enter()
+    
+    def _clear_history(self) -> None:
+        """Clear simulation history."""
+        if not self.engine.history.has_runs():
+            self.menu.print_warning("No history to clear.")
+            self.menu.wait_for_enter()
+            return
+        
+        if self.menu.prompt_confirm("Are you sure you want to clear all simulation history?"):
+            self.engine.history.clear_history()
+            self.menu.print_success("Simulation history cleared.")
+        else:
+            self.menu.print_info("History not cleared.")
+        
+        self.menu.wait_for_enter()
         
         self.menu.wait_for_enter()
     

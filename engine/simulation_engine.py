@@ -23,6 +23,7 @@ from memory import (
 )
 from .activity_logger import ActivityLogger, EventType
 from .metrics_collector import MetricsCollector
+from .simulation_history import SimulationHistory
 
 
 class SimulationEngine:
@@ -67,6 +68,9 @@ class SimulationEngine:
         # Logging and metrics
         self.logger = ActivityLogger()
         self.metrics = MetricsCollector()
+        
+        # Simulation history tracking
+        self.history = SimulationHistory()
         
         # Simulation state
         self.current_time = 0
@@ -222,6 +226,23 @@ class SimulationEngine:
         self.metrics.record_processes(self.processes)
         self.metrics.set_total_time(self.last_result.total_time)
         self.metrics.context_switches = self.last_result.context_switches
+        
+        # Add to simulation history
+        self.history.add_run(
+            algorithm=self.last_result.algorithm,
+            processes=self.last_result.processes,
+            gantt_data=self.last_result.gantt_chart,
+            metrics={
+                'avg_waiting_time': self.last_result.avg_waiting_time,
+                'avg_turnaround_time': self.last_result.avg_turnaround_time,
+                'avg_response_time': self.last_result.avg_response_time,
+                'avg_completion_time': self.last_result.avg_completion_time,
+                'cpu_utilization': self.last_result.cpu_utilization,
+                'throughput': self.last_result.throughput,
+                'context_switches': self.last_result.context_switches,
+                'total_time': self.last_result.total_time
+            }
+        )
         
         # Log simulation end
         self.logger.log_simulation_end(self.last_result.total_time)

@@ -1,6 +1,6 @@
 """Adaptive Scheduler Selector for OS simulation."""
 
-from typing import List, Tuple, Optional, Type
+from typing import List, Tuple, Optional, Type, Dict
 from dataclasses import dataclass
 import statistics
 
@@ -40,6 +40,14 @@ class SchedulerRecommendation:
     confidence: float  # 0.0 to 1.0
 
 
+@dataclass
+class PerformanceEstimate:
+    """Performance estimate for an algorithm."""
+    algorithm: str
+    estimated_wait_time: float
+    scheduler_class: type
+
+
 class AdaptiveSelector:
     """Intelligent scheduler selector based on workload analysis."""
     
@@ -47,6 +55,10 @@ class AdaptiveSelector:
     MIN_TIME_QUANTUM = 10
     MAX_TIME_QUANTUM = 50
     QUANTUM_DIVISOR = 5
+    
+    # Threshold for using Priority scheduler
+    PRIORITY_VARIANCE_THRESHOLD = 6
+    PRIORITY_RANGE_THRESHOLD = 7
     
     def __init__(self):
         self.schedulers = {
@@ -114,11 +126,80 @@ class AdaptiveSelector:
             is_batch=is_batch
         )
     
+    def _estimate_performance(self, processes: List[Process], 
+                              analysis: WorkloadAnalysis) -> Dict[str, PerformanceEstimate]:
+        """Estimate avg waiting time for ALL 7 algorithms.
+        
+        Args:
+            processes: List of processes to analyze
+            analysis: Pre-computed workload analysis
+            
+        Returns:
+            Dictionary mapping algorithm name to PerformanceEstimate
+        """
+        n = analysis.process_count
+        avg_burst = analysis.avg_burst_time
+        cv = analysis.coefficient_of_variation
+        
+        estimates = {}
+        
+        # FCFS: Average waiting time approximation
+        # Convoy effect makes this worse with high variance
+        fcfs_wait = avg_burst * (n - 1) / 2
+        if cv > 0.5:
+            fcfs_wait *= (1 + cv * 0.3)  # Penalize for high variance
+        estimates['FCFS'] = PerformanceEstimate('FCFS', fcfs_wait, FCFSScheduler)
+        
+        # SJF: Optimal for non-preemptive - better with sorted short jobs
+        sjf_wait = avg_burst * (n - 1) / 3
+        estimates['SJF'] = PerformanceEstimate('SJF', sjf_wait, SJFScheduler)
+        
+        # SRTF: Best case, preemptive version of SJF
+        srtf_wait = avg_burst * (n - 1) / 4
+        estimates['SRTF'] = PerformanceEstimate('SRTF', srtf_wait, SRTFScheduler)
+        
+        # Round Robin: Depends on quantum
+        quantum = max(self.MIN_TIME_QUANTUM, int(avg_burst / self.QUANTUM_DIVISOR))
+        quantum = min(quantum, self.MAX_TIME_QUANTUM)
+        rr_wait = avg_burst * n / 2
+        # RR is better for interactive (I/O-bound) workloads
+        if analysis.io_bound_ratio > 0.3:
+            rr_wait *= 0.8
+        estimates['RR'] = PerformanceEstimate(f'RR (q={quantum})', rr_wait, 
+                                               lambda: RoundRobinScheduler(quantum))
+        
+        # Priority: Depends on priority distribution
+        priority_wait = avg_burst * (n - 1) / 3
+        # Worse if priorities are similar (less meaningful ordering)
+        if analysis.priority_variance < 3:
+            priority_wait *= 1.3
+        estimates['Priority'] = PerformanceEstimate('Priority', priority_wait, PriorityScheduler)
+        
+        # Preemptive Priority: Better with high I/O ratio
+        preemptive_priority_wait = avg_burst * (n - 1) / 4
+        if analysis.io_bound_ratio > 0.3:
+            preemptive_priority_wait *= 0.9
+        estimates['PreemptivePriority'] = PerformanceEstimate('Preemptive Priority', 
+                                                               preemptive_priority_wait,
+                                                               PreemptivePriorityScheduler)
+        
+        # MLFQ: Good for mixed workloads with many processes
+        mlfq_wait = avg_burst * n / 3
+        if n > 10:
+            mlfq_wait *= 0.9  # Scales better with many processes
+        estimates['MLFQ'] = PerformanceEstimate('MLFQ', mlfq_wait, MLFQScheduler)
+        
+        return estimates
+    
     def select_scheduler(self, processes: List[Process]) -> SchedulerRecommendation:
-        """Select the best scheduling algorithm based on workload analysis."""
+        """Select the best scheduling algorithm based on workload analysis.
+        
+        Uses performance estimation to prioritize algorithms with lowest
+        estimated waiting time, while considering workload characteristics.
+        """
         analysis = self.analyze_workload(processes)
         
-        # Decision tree for scheduler selection
+        # Handle empty process list
         if analysis.process_count == 0:
             return SchedulerRecommendation(
                 scheduler=FCFSScheduler(),
@@ -128,146 +209,119 @@ class AdaptiveSelector:
                 confidence=1.0
             )
         
-        # 1. Check for batch workload first (high burst, low I/O)
-        if analysis.is_batch:
-            if analysis.coefficient_of_variation < 0.3:
-                return self._recommend_fcfs(analysis)
-            else:
-                return self._recommend_sjf(analysis)
+        # Step 1: Calculate performance estimates for all algorithms
+        estimates = self._estimate_performance(processes, analysis)
         
-        # 2. Check for interactive workload (low burst, high I/O)
-        if analysis.is_interactive:
-            if analysis.process_count > 15:
-                return self._recommend_mlfq(analysis)
-            else:
-                return self._recommend_round_robin(analysis)
+        # Step 2: Sort by estimated wait time (ascending)
+        sorted_estimates = sorted(estimates.values(), 
+                                  key=lambda x: x.estimated_wait_time)
         
-        # 3. ONLY use priority if variance is VERY high (>6) AND range is wide (>7)
-        if analysis.priority_variance > 6 and analysis.priority_range > 7:
-            if analysis.is_interactive or analysis.io_bound_ratio > 0.3:
-                return self._recommend_preemptive_priority(analysis)
+        # Get top 3 algorithms
+        top_3 = sorted_estimates[:3]
+        top_3_keys = set()
+        for e in top_3:
+            if 'Priority' in e.algorithm and 'Preemptive' in e.algorithm:
+                top_3_keys.add('PreemptivePriority')
+            elif 'Priority' in e.algorithm:
+                top_3_keys.add('Priority')
+            elif 'RR' in e.algorithm:
+                top_3_keys.add('RR')
             else:
-                return self._recommend_priority(analysis)
+                top_3_keys.add(e.algorithm)
         
-        # Mixed workload - use CV to decide
-        if analysis.coefficient_of_variation > 0.5:
-            # High variance in burst times -> SRTF is optimal
-            return self._recommend_srtf(analysis)
-        elif analysis.coefficient_of_variation > 0.3:
-            # Moderate variance -> SJF works well
-            return self._recommend_sjf(analysis)
-        elif analysis.process_count > 10:
-            # Many processes with similar burst times -> Round Robin
-            return self._recommend_round_robin(analysis)
+        # Step 3: Select from top 3 based on workload type
+        selected = top_3[0]  # Default to best performer
+        
+        # Step 4: Only use Priority scheduling if it's in top 3 AND meets criteria
+        priority_criteria_met = (analysis.priority_variance > self.PRIORITY_VARIANCE_THRESHOLD and 
+                                  analysis.priority_range > self.PRIORITY_RANGE_THRESHOLD)
+        
+        # Check if Priority (non-preemptive) is in top 3
+        priority_in_top_3 = 'Priority' in top_3_keys
+        preemptive_priority_in_top_3 = 'PreemptivePriority' in top_3_keys
+        
+        if priority_criteria_met:
+            if preemptive_priority_in_top_3 and analysis.io_bound_ratio > 0.3:
+                selected = estimates['PreemptivePriority']
+            elif priority_in_top_3:
+                selected = estimates['Priority']
+            # If neither is in top 3, use best performer (already selected)
         else:
-            # Simple workload -> FCFS is sufficient
-            return self._recommend_fcfs(analysis)
-    
-    def _recommend_fcfs(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
-        expected_wait = analysis.avg_burst_time * (analysis.process_count - 1) / 2
-        return SchedulerRecommendation(
-            scheduler=FCFSScheduler(),
-            algorithm_name="FCFS",
-            justification=(
-                f"Low burst time variance (CV={analysis.coefficient_of_variation:.2f}) with "
-                f"{analysis.process_count} processes. FCFS provides simplicity and fairness "
-                f"with minimal overhead. Expected avg wait time: {expected_wait:.0f}ms"
-            ),
-            expected_avg_wait=expected_wait,
-            confidence=0.75
-        )
-    
-    def _recommend_sjf(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
-        # Approximate expected wait (SJF is optimal for non-preemptive)
-        expected_wait = analysis.avg_burst_time * (analysis.process_count - 1) / 3
-        return SchedulerRecommendation(
-            scheduler=SJFScheduler(),
-            algorithm_name="SJF",
-            justification=(
-                f"Moderate burst variance (CV={analysis.coefficient_of_variation:.2f}) with "
-                f"{analysis.process_count} processes. SJF minimizes average waiting time "
-                f"for non-preemptive scheduling. Expected avg wait time: {expected_wait:.0f}ms"
-            ),
-            expected_avg_wait=expected_wait,
-            confidence=0.85
-        )
-    
-    def _recommend_srtf(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
-        expected_wait = analysis.avg_burst_time * (analysis.process_count - 1) / 4
-        return SchedulerRecommendation(
-            scheduler=SRTFScheduler(),
-            algorithm_name="SRTF",
-            justification=(
-                f"Moderate burst variance (CV={analysis.coefficient_of_variation:.2f}) with "
-                f"{analysis.process_count} processes. SRTF provides optimal response time "
-                f"for interactive workloads while maintaining efficiency. "
-                f"Expected avg wait time: {expected_wait:.0f}ms"
-            ),
-            expected_avg_wait=expected_wait,
-            confidence=0.90
-        )
-    
-    def _recommend_round_robin(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
-        # Choose time quantum based on average burst time
-        quantum = max(self.MIN_TIME_QUANTUM, int(analysis.avg_burst_time / self.QUANTUM_DIVISOR))
-        quantum = min(quantum, self.MAX_TIME_QUANTUM)
+            # Select based on workload type from top 3
+            if analysis.is_interactive:
+                # Prefer RR or MLFQ for interactive workloads
+                for e in top_3:
+                    if 'RR' in e.algorithm or 'MLFQ' in e.algorithm:
+                        selected = e
+                        break
+            elif analysis.io_bound_ratio > 0.5:
+                # High I/O: prefer RR or MLFQ
+                for e in top_3:
+                    if 'RR' in e.algorithm or 'MLFQ' in e.algorithm:
+                        selected = e
+                        break
+            # Otherwise, use the best performer (already selected)
         
-        expected_wait = analysis.avg_burst_time * analysis.process_count / 2
+        # Build performance estimates string for justification
+        estimates_str = self._format_performance_estimates(sorted_estimates, selected.algorithm)
+        
+        # Create scheduler instance
+        if callable(selected.scheduler_class):
+            try:
+                scheduler = selected.scheduler_class()
+            except TypeError:
+                # It's a lambda returning the scheduler
+                scheduler = selected.scheduler_class()
+        else:
+            scheduler = selected.scheduler_class()
+        
+        # Build justification
+        justification = self._build_justification(selected, analysis, estimates_str)
+        
         return SchedulerRecommendation(
-            scheduler=RoundRobinScheduler(time_quantum=quantum),
-            algorithm_name=f"Round Robin (q={quantum})",
-            justification=(
-                f"Interactive workload detected with {analysis.process_count} processes "
-                f"and {analysis.io_bound_ratio*100:.0f}% I/O-bound processes. "
-                f"Round Robin ensures fair CPU time distribution and good response time. "
-                f"Time quantum set to {quantum}ms. Expected avg wait time: {expected_wait:.0f}ms"
-            ),
-            expected_avg_wait=expected_wait,
-            confidence=0.80
-        )
-    
-    def _recommend_priority(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
-        expected_wait = analysis.avg_burst_time * (analysis.process_count - 1) / 3
-        return SchedulerRecommendation(
-            scheduler=PriorityScheduler(),
-            algorithm_name="Priority",
-            justification=(
-                f"High priority variance (range={analysis.priority_range}) detected with "
-                f"{analysis.process_count} processes. Priority scheduling ensures "
-                f"critical processes are handled first. Expected avg wait time: {expected_wait:.0f}ms"
-            ),
-            expected_avg_wait=expected_wait,
-            confidence=0.75
-        )
-    
-    def _recommend_preemptive_priority(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
-        expected_wait = analysis.avg_burst_time * (analysis.process_count - 1) / 4
-        return SchedulerRecommendation(
-            scheduler=PreemptivePriorityScheduler(),
-            algorithm_name="Preemptive Priority with Aging",
-            justification=(
-                f"High priority variance (range={analysis.priority_range}) with interactive "
-                f"workload ({analysis.io_bound_ratio*100:.0f}% I/O-bound). Preemptive priority "
-                f"with aging prevents starvation while ensuring critical processes run first. "
-                f"Expected avg wait time: {expected_wait:.0f}ms"
-            ),
-            expected_avg_wait=expected_wait,
+            scheduler=scheduler,
+            algorithm_name=selected.algorithm,
+            justification=justification,
+            expected_avg_wait=selected.estimated_wait_time,
             confidence=0.85
         )
     
-    def _recommend_mlfq(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
-        expected_wait = analysis.avg_burst_time * analysis.process_count / 3
-        return SchedulerRecommendation(
-            scheduler=MLFQScheduler(),
-            algorithm_name="MLFQ",
-            justification=(
-                f"Mixed interactive workload with {analysis.process_count} processes. "
-                f"MLFQ automatically adapts to process behavior, favoring short/interactive "
-                f"processes while preventing starvation of longer ones. "
-                f"Expected avg wait time: {expected_wait:.0f}ms"
-            ),
-            expected_avg_wait=expected_wait,
-            confidence=0.85
+    def _format_performance_estimates(self, sorted_estimates: List[PerformanceEstimate],
+                                       selected_algo: str) -> str:
+        """Format performance estimates for display."""
+        lines = []
+        for i, est in enumerate(sorted_estimates):
+            marker = "← BEST" if i == 0 else ""
+            if est.algorithm == selected_algo and i > 0:
+                marker = "← SELECTED"
+            lines.append(f"  {est.algorithm:25s} {est.estimated_wait_time:>8.0f}ms {marker}")
+        return "\n".join(lines)
+    
+    def _build_justification(self, selected: PerformanceEstimate,
+                             analysis: WorkloadAnalysis,
+                             estimates_str: str) -> str:
+        """Build detailed justification string."""
+        algo_name = selected.algorithm.split()[0]  # Remove quantum info if present
+        
+        reason = ""
+        if algo_name in ('SRTF', 'SJF'):
+            reason = f"{algo_name} provides lowest estimated waiting time for this workload."
+        elif 'RR' in algo_name:
+            reason = f"Round Robin provides fair CPU distribution for {analysis.process_count} processes."
+        elif 'MLFQ' in algo_name:
+            reason = "MLFQ adapts to process behavior, balancing interactive and batch workloads."
+        elif 'Priority' in algo_name:
+            reason = f"Priority scheduling is effective with high priority variance (range={analysis.priority_range})."
+        else:
+            reason = f"FCFS provides simplicity with minimal overhead."
+        
+        return (
+            f"SELECTED: {selected.algorithm}\n\n"
+            f"Performance Estimates:\n{estimates_str}\n\n"
+            f"Workload: {analysis.process_count} processes, "
+            f"CV={analysis.coefficient_of_variation:.2f}, "
+            f"I/O ratio={analysis.io_bound_ratio*100:.0f}%\n\n"
+            f"Justification: {reason}"
         )
     
     def compare_all(self, processes: List[Process]) -> List[Tuple[str, SchedulingResult]]:

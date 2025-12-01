@@ -110,6 +110,15 @@ class MenuSystem:
         export_menu.add_item(MenuItem("4", "Generate ANALYSIS_REPORT.md"))
         export_menu.add_item(MenuItem("0", "Back"))
         self.menus["export"] = export_menu
+        
+        # Gantt Chart submenu
+        gantt_menu = Menu("Gantt Chart Options")
+        gantt_menu.add_item(MenuItem("1", "Current Simulation"))
+        gantt_menu.add_item(MenuItem("2", "All History"))
+        gantt_menu.add_item(MenuItem("3", "View Specific Run"))
+        gantt_menu.add_item(MenuItem("4", "Clear History"))
+        gantt_menu.add_item(MenuItem("0", "Back"))
+        self.menus["gantt"] = gantt_menu
     
     def display_menu(self, menu_name: str = "main") -> None:
         """Display a menu."""
