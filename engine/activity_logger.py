@@ -248,7 +248,7 @@ class ActivityLogger:
     
     def export_to_file(self, filename: str = "simulation_log.txt") -> None:
         """Export log to a text file."""
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write("=" * 70 + "\n")
             f.write("                    OS SIMULATION LOG\n")
             f.write("=" * 70 + "\n\n")
@@ -265,7 +265,7 @@ class ActivityLogger:
             'events': [e.to_dict() for e in self.events],
             'total_events': len(self.events)
         }
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
     
     def get_summary(self) -> Dict:

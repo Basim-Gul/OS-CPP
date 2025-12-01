@@ -224,19 +224,19 @@ class MenuSystem:
     
     def print_success(self, message: str) -> None:
         """Print a success message."""
-        self.console.print(f"[bold green]✓ {message}[/bold green]")
+        self.console.print(f"[bold green][OK] {message}[/bold green]")
     
     def print_error(self, message: str) -> None:
         """Print an error message."""
-        self.console.print(f"[bold red]✗ {message}[/bold red]")
+        self.console.print(f"[bold red][X] {message}[/bold red]")
     
     def print_warning(self, message: str) -> None:
         """Print a warning message."""
-        self.console.print(f"[bold yellow]⚠ {message}[/bold yellow]")
+        self.console.print(f"[bold yellow][!] {message}[/bold yellow]")
     
     def print_info(self, message: str) -> None:
         """Print an info message."""
-        self.console.print(f"[bold blue]ℹ {message}[/bold blue]")
+        self.console.print(f"[bold blue][i] {message}[/bold blue]")
     
     def wait_for_enter(self) -> None:
         """Wait for user to press Enter."""

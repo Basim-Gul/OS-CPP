@@ -253,5 +253,5 @@ class GanttChart:
                      filename: str = "gantt_chart.txt") -> None:
         """Save Gantt chart to file."""
         ascii_chart = self.generate_ascii(gantt_data)
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(ascii_chart)

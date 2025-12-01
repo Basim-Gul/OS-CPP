@@ -105,10 +105,10 @@ The adaptive selector analyzes workload characteristics:
 4. **I/O vs CPU Bound**: Ratio of process types
 
 **Selection Logic:**
-- Low variance, batch jobs → FCFS/SJF
-- High variance, interactive → SRTF
-- Many processes, short burst → Round Robin/MLFQ
-- Priority-sensitive → Priority scheduling
+- Low variance, batch jobs -> FCFS/SJF
+- High variance, interactive -> SRTF
+- Many processes, short burst -> Round Robin/MLFQ
+- Priority-sensitive -> Priority scheduling
 
 ---
 
@@ -126,8 +126,8 @@ The resource manager handles:
 
 Implemented as a directed graph:
 - **Nodes**: Processes (P) and Resources (R)
-- **Request Edges**: P → R (process requesting resource)
-- **Assignment Edges**: R → P (resource allocated to process)
+- **Request Edges**: P -> R (process requesting resource)
+- **Assignment Edges**: R -> P (resource allocated to process)
 
 ### 3.3 Deadlock Detection Algorithm
 
@@ -146,8 +146,8 @@ Algorithm: detect_deadlock()
 
 Example detection output:
 ```
-[00245ms] ⚠️ DEADLOCK DETECTED!
-Circular Wait Chain: P1 → R2 → P3 → R4 → P5 → R1 → P1
+[00245ms] [WARNING] DEADLOCK DETECTED!
+Circular Wait Chain: P1 -> R2 -> P3 -> R4 -> P5 -> R1 -> P1
 Processes in Deadlock: [P1, P3, P5]
 Resources Involved: [R1, R2, R4]
 ```
@@ -172,7 +172,7 @@ Safe state algorithm:
 1. Calculate need matrix: Need = Max - Allocation
 2. Simulate: Find process that can complete with available resources
 3. Release resources and repeat
-4. If all processes complete → Safe state
+4. If all processes complete -> Safe state
 
 ### 4.3 Resource Ordering (Avoidance)
 
@@ -227,7 +227,7 @@ Features:
 Running 5 threads, each incrementing shared counter 1000 times...
 Expected: 5000
 Actual: 3847
-❌ Race condition occurred! Lost 1153 increments
+[X] Race condition occurred! Lost 1153 increments
 ```
 
 **With Mutex:**
@@ -235,7 +235,7 @@ Actual: 3847
 Running 5 threads, each incrementing shared counter 1000 times...
 Expected: 5000
 Actual: 5000
-✅ Mutex prevented race condition! Data integrity maintained.
+[OK] Mutex prevented race condition! Data integrity maintained.
 ```
 
 ### 5.4 Producer-Consumer Problem
