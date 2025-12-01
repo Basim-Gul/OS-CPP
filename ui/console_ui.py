@@ -697,7 +697,7 @@ class ConsoleUI:
         summary = self.engine.get_metrics_summary()
         filename = self.menu.prompt_string("Filename", "metrics_summary.txt")
         
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(summary)
         
         self.menu.print_success(f"Metrics exported to {filename}")

@@ -128,26 +128,26 @@ class AdaptiveSelector:
                 confidence=1.0
             )
         
-        # High priority variance -> Use priority scheduling
-        if analysis.priority_variance > 4 and analysis.priority_range > 5:
-            if analysis.is_interactive or analysis.io_bound_ratio > 0.3:
-                return self._recommend_preemptive_priority(analysis)
+        # 1. Check for batch workload first (high burst, low I/O)
+        if analysis.is_batch:
+            if analysis.coefficient_of_variation < 0.3:
+                return self._recommend_fcfs(analysis)
             else:
-                return self._recommend_priority(analysis)
+                return self._recommend_sjf(analysis)
         
-        # Interactive workload (low burst, high I/O)
+        # 2. Check for interactive workload (low burst, high I/O)
         if analysis.is_interactive:
             if analysis.process_count > 15:
                 return self._recommend_mlfq(analysis)
             else:
                 return self._recommend_round_robin(analysis)
         
-        # Batch workload (high burst, low I/O)
-        if analysis.is_batch:
-            if analysis.coefficient_of_variation < 0.3:
-                return self._recommend_fcfs(analysis)
+        # 3. ONLY use priority if variance is VERY high (>6) AND range is wide (>7)
+        if analysis.priority_variance > 6 and analysis.priority_range > 7:
+            if analysis.is_interactive or analysis.io_bound_ratio > 0.3:
+                return self._recommend_preemptive_priority(analysis)
             else:
-                return self._recommend_sjf(analysis)
+                return self._recommend_priority(analysis)
         
         # Mixed workload - use CV to decide
         if analysis.coefficient_of_variation > 0.5:
