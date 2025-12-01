@@ -1,10 +1,14 @@
 """ASCII Gantt Chart generator for OS simulation."""
 
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, TYPE_CHECKING
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
+from rich import box
+
+if TYPE_CHECKING:
+    from engine.simulation_history import SimulationHistory, SimulationRun
 
 
 class GanttChart:
@@ -255,3 +259,120 @@ class GanttChart:
         ascii_chart = self.generate_ascii(gantt_data)
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(ascii_chart)
+    
+    def display_all_runs(self, history: 'SimulationHistory') -> None:
+        """Display Gantt charts for all simulation runs.
+        
+        Args:
+            history: SimulationHistory object containing all runs
+        """
+        runs = history.get_all_runs()
+        
+        if not runs:
+            self.console.print("[yellow]No simulation runs in history.[/yellow]")
+            return
+        
+        self.console.print(Panel(
+            f"[bold]Simulation History - {len(runs)} Run(s)[/bold]",
+            style="bold cyan"
+        ))
+        
+        for run in runs:
+            self._display_single_run(run)
+            self.console.print()
+    
+    def display_single_run(self, history: 'SimulationHistory', run_number: int) -> bool:
+        """Display Gantt chart for a specific simulation run.
+        
+        Args:
+            history: SimulationHistory object containing all runs
+            run_number: The run number to display
+            
+        Returns:
+            True if run was found and displayed, False otherwise
+        """
+        run = history.get_run(run_number)
+        
+        if not run:
+            self.console.print(f"[red]Run #{run_number} not found.[/red]")
+            return False
+        
+        self._display_single_run(run)
+        return True
+    
+    def _display_single_run(self, run: 'SimulationRun') -> None:
+        """Display a single simulation run.
+        
+        Args:
+            run: SimulationRun object to display
+        """
+        # Header for this run
+        process_names = ", ".join(run.get_process_names())
+        
+        self.console.print(Panel(
+            f"[bold]RUN #{run.run_number} - {run.algorithm}[/bold] ({run.get_formatted_timestamp()})\n"
+            f"Processes: {process_names}",
+            title=f"Run #{run.run_number}",
+            border_style="green",
+            box=box.ROUNDED
+        ))
+        
+        # Display Gantt chart
+        if run.gantt_data:
+            self.generate_rich(run.gantt_data)
+            
+            # Display metrics summary
+            self._display_run_metrics(run)
+        else:
+            self.console.print("[yellow]No Gantt data available for this run.[/yellow]")
+    
+    def _display_run_metrics(self, run: 'SimulationRun') -> None:
+        """Display metrics for a simulation run.
+        
+        Args:
+            run: SimulationRun object with metrics
+        """
+        metrics = run.metrics
+        
+        table = Table(title=f"Metrics - Run #{run.run_number}", box=box.SIMPLE)
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+        
+        table.add_row("Avg Waiting Time", f"{metrics.get('avg_waiting_time', 0):.2f}ms")
+        table.add_row("Avg Turnaround Time", f"{metrics.get('avg_turnaround_time', 0):.2f}ms")
+        table.add_row("Avg Response Time", f"{metrics.get('avg_response_time', 0):.2f}ms")
+        table.add_row("CPU Utilization", f"{metrics.get('cpu_utilization', 0):.2f}%")
+        table.add_row("Context Switches", str(metrics.get('context_switches', 0)))
+        table.add_row("Total Time", f"{metrics.get('total_time', 0)}ms")
+        
+        self.console.print(table)
+    
+    def list_runs(self, history: 'SimulationHistory') -> None:
+        """Display a list of all simulation runs.
+        
+        Args:
+            history: SimulationHistory object containing all runs
+        """
+        runs = history.get_all_runs()
+        
+        if not runs:
+            self.console.print("[yellow]No simulation runs in history.[/yellow]")
+            return
+        
+        table = Table(title="Simulation History", box=box.ROUNDED)
+        table.add_column("Run #", style="cyan", justify="center")
+        table.add_column("Algorithm", style="white")
+        table.add_column("Timestamp", style="green")
+        table.add_column("Processes", style="yellow")
+        table.add_column("Avg Wait", style="magenta", justify="right")
+        
+        for run in runs:
+            table.add_row(
+                str(run.run_number),
+                run.algorithm,
+                run.get_formatted_timestamp(),
+                ", ".join(run.get_process_names()),
+                f"{run.metrics.get('avg_waiting_time', 0):.2f}ms"
+            )
+        
+        self.console.print(table)

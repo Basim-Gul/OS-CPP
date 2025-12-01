@@ -29,6 +29,7 @@ class SimulationMetrics:
     avg_waiting_time: float = 0.0
     avg_turnaround_time: float = 0.0
     avg_response_time: float = 0.0
+    avg_completion_time: float = 0.0
     max_waiting_time: int = 0
     min_waiting_time: int = 0
     
@@ -130,6 +131,7 @@ class MetricsCollector:
         total_waiting = sum(m.waiting_time for m in self.process_metrics.values())
         total_turnaround = sum(m.turnaround_time for m in self.process_metrics.values())
         total_response = sum(m.response_time for m in self.process_metrics.values())
+        total_completion = sum(m.completion_time for m in self.process_metrics.values())
         
         waiting_times = [m.waiting_time for m in self.process_metrics.values()]
         
@@ -155,6 +157,7 @@ class MetricsCollector:
             avg_waiting_time=total_waiting / n,
             avg_turnaround_time=total_turnaround / n,
             avg_response_time=total_response / n,
+            avg_completion_time=total_completion / n,
             max_waiting_time=max(waiting_times) if waiting_times else 0,
             min_waiting_time=min(waiting_times) if waiting_times else 0,
             cpu_utilization=cpu_util,
@@ -203,6 +206,7 @@ class MetricsCollector:
             f"  Average Waiting Time:    {m.avg_waiting_time:.2f}ms",
             f"  Average Turnaround Time: {m.avg_turnaround_time:.2f}ms",
             f"  Average Response Time:   {m.avg_response_time:.2f}ms",
+            f"  Average Completion Time: {m.avg_completion_time:.2f}ms",
             f"  Max Waiting Time:        {m.max_waiting_time}ms",
             f"  Min Waiting Time:        {m.min_waiting_time}ms",
             "",
