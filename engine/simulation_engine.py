@@ -28,6 +28,11 @@ from .metrics_collector import MetricsCollector
 class SimulationEngine:
     """Main orchestrator for the OS simulation."""
     
+    # Constants for process auto-generation
+    DEFAULT_ARRIVAL_SPREAD = 20
+    DEFAULT_MIN_PAGES = 3
+    DEFAULT_MAX_PAGES = 10
+    
     def __init__(self, num_frames: int = 50):
         # Process management
         self.processes: List[Process] = []
@@ -118,9 +123,9 @@ class SimulationEngine:
             burst = random.randint(*burst_range)
             priority = random.randint(*priority_range)
             arrival = current_arrival
-            current_arrival += random.randint(0, 20)
+            current_arrival += random.randint(0, self.DEFAULT_ARRIVAL_SPREAD)
             io_bound = random.random() < io_ratio
-            pages = random.randint(3, 10)
+            pages = random.randint(self.DEFAULT_MIN_PAGES, self.DEFAULT_MAX_PAGES)
             
             process = self.create_process(
                 name=name,

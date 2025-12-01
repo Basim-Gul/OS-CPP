@@ -97,6 +97,13 @@ class OptimalReplacement:
         hits = 0
         history = []
         
+        # Precompute next use positions for each page at each index for O(n) lookup
+        next_use = {}  # {page: [list of indices where it appears]}
+        for idx, ref in enumerate(reference_string):
+            if ref not in next_use:
+                next_use[ref] = []
+            next_use[ref].append(idx)
+        
         for i, ref in enumerate(reference_string):
             if ref in frames:
                 # Hit
@@ -111,19 +118,26 @@ class OptimalReplacement:
                     idx = frames.index(None)
                     frames[idx] = ref
                 else:
-                    # Find optimal victim (one used furthest in future)
-                    future = reference_string[i+1:]
+                    # Find optimal victim using precomputed positions
                     best_idx = 0
                     max_distance = -1
                     
                     for j, page in enumerate(frames):
-                        try:
-                            distance = future.index(page)
-                        except ValueError:
+                        # Find next use of this page after current position
+                        positions = next_use.get(page, [])
+                        # Binary search for next position > i
+                        next_pos = None
+                        for pos in positions:
+                            if pos > i:
+                                next_pos = pos
+                                break
+                        
+                        if next_pos is None:
                             # Page not used again - evict it
                             best_idx = j
                             break
                         
+                        distance = next_pos - i
                         if distance > max_distance:
                             max_distance = distance
                             best_idx = j

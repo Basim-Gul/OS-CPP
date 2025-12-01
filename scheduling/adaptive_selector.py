@@ -43,6 +43,11 @@ class SchedulerRecommendation:
 class AdaptiveSelector:
     """Intelligent scheduler selector based on workload analysis."""
     
+    # Constants for Round Robin quantum calculation
+    MIN_TIME_QUANTUM = 10
+    MAX_TIME_QUANTUM = 50
+    QUANTUM_DIVISOR = 5
+    
     def __init__(self):
         self.schedulers = {
             'FCFS': FCFSScheduler,
@@ -204,8 +209,8 @@ class AdaptiveSelector:
     
     def _recommend_round_robin(self, analysis: WorkloadAnalysis) -> SchedulerRecommendation:
         # Choose time quantum based on average burst time
-        quantum = max(10, int(analysis.avg_burst_time / 5))
-        quantum = min(quantum, 50)  # Cap at 50ms
+        quantum = max(self.MIN_TIME_QUANTUM, int(analysis.avg_burst_time / self.QUANTUM_DIVISOR))
+        quantum = min(quantum, self.MAX_TIME_QUANTUM)
         
         expected_wait = analysis.avg_burst_time * analysis.process_count / 2
         return SchedulerRecommendation(

@@ -28,6 +28,9 @@ class ResolutionResult:
 class DeadlockResolver:
     """Resolves detected deadlocks using various strategies."""
     
+    # Maximum iterations for deadlock resolution loop
+    MAX_RESOLUTION_ITERATIONS = 100
+    
     def __init__(self, resource_manager: ResourceManager,
                  rag: ResourceAllocationGraph,
                  detector: DeadlockDetector):
@@ -203,7 +206,7 @@ class DeadlockResolver:
         Continues resolving until no deadlocks remain.
         """
         results = []
-        max_iterations = 100  # Safety limit
+        max_iterations = self.MAX_RESOLUTION_ITERATIONS
         
         for _ in range(max_iterations):
             result = self.resolve_automatically(method)
