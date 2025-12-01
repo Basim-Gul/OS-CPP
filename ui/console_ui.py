@@ -373,8 +373,6 @@ class ConsoleUI:
             self.menu.print_info("History not cleared.")
         
         self.menu.wait_for_enter()
-        
-        self.menu.wait_for_enter()
     
     # ==================== Logs ====================
     

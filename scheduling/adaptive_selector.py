@@ -165,8 +165,9 @@ class AdaptiveSelector:
         # RR is better for interactive (I/O-bound) workloads
         if analysis.io_bound_ratio > 0.3:
             rr_wait *= 0.8
+        # Use default value to avoid closure issue
         estimates['RR'] = PerformanceEstimate(f'RR (q={quantum})', rr_wait, 
-                                               lambda: RoundRobinScheduler(quantum))
+                                               lambda q=quantum: RoundRobinScheduler(q))
         
         # Priority: Depends on priority distribution
         priority_wait = avg_burst * (n - 1) / 3
@@ -265,15 +266,8 @@ class AdaptiveSelector:
         # Build performance estimates string for justification
         estimates_str = self._format_performance_estimates(sorted_estimates, selected.algorithm)
         
-        # Create scheduler instance
-        if callable(selected.scheduler_class):
-            try:
-                scheduler = selected.scheduler_class()
-            except TypeError:
-                # It's a lambda returning the scheduler
-                scheduler = selected.scheduler_class()
-        else:
-            scheduler = selected.scheduler_class()
+        # Create scheduler instance - all scheduler_class values are callable
+        scheduler = selected.scheduler_class()
         
         # Build justification
         justification = self._build_justification(selected, analysis, estimates_str)
